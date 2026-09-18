@@ -1,0 +1,103 @@
+# Defaults are deliberately CLOSED — no image tag, host, Istio, JWT or secret keys — so a
+# missing per-environment override fails the render instead of deploying something open.
+
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: appdbsg/appdb-data-api
+  tag: ""                 # REQUIRED. CI passes --set image.tag=<short SHA>. Never :latest.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: regcred
+
+# "" keeps the image entrypoint (serves /App/dab-config.json). Setting a path switches the
+# container to the CLI, because the entrypoint ignores every config flag — see docs §2.
+configFile: ""
+dabEnvironment: ""        # e.g. "Staging"
+
+auth:
+  jwtIssuer: ""           # REQUIRED. Public OIDC value, not a secret.
+  jwtAudience: ""         # REQUIRED. This API's registered OIDC audience.
+  jwksUri: ""             # REQUIRED when istio.requireJwt. Your OIDC provider's {issuer}/.well-known/jwks.json.
+
+podLabels: {}
+
+# The DAB base image defines APP_UID=1654 but never issues USER, so `runAsNonRoot` with no uid
+# defers to the image — which is root — and the kubelet refuses the container at create time,
+# after every dry-run has passed. Must match `USER $APP_UID` in the Dockerfile; ci/gate-image-uid.sh
+# checks these against the uid the built image actually resolves to. See docs/ci-cd-dev.md §6a.
+podSecurityContext:
+  runAsUser: 1654
+  runAsGroup: 1654
+  fsGroup: 1654           # makes the /tmp emptyDir group-writable under readOnlyRootFilesystem
+
+serviceAccount:
+  create: true
+  name: ""
+  roleArn: ""             # REQUIRED when secretStore.create. IRSA role for the SecretStore.
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000
+
+# Only version shared-eks serves; v1beta1 is served=false there.
+esoApiVersion: external-secrets.io/v1
+
+# Namespaced, not a ClusterSecretStore: shared-eks is shared, so the namespace should be a
+# real boundary and not just an IAM one.
+secretStore:
+  create: true
+  name: ""
+  region: ap-southeast-1
+
+externalSecret:
+  enabled: true
+  name: appdb-data-api-conn
+  refreshInterval: 1h
+  storeName: ""           # "" uses the chart's own SecretStore
+  storeKind: SecretStore
+  # Provide EXACTLY ONE of the two below (enabled requires at least one):
+  data: []                # [{secretKey, remoteKey}] — one k8s key per SM secret (staging/prod).
+  dataFrom: []            # [{key}] — extract EVERY property of one JSON SM secret (dev-all: many CONN_* keys).
+
+istio:
+  enabled: false
+  host: ""                # REQUIRED when enabled
+  gateway: istio-system/private-gateway   # shared, DevOps-owned; never created here
+  # Enforce a valid OIDC bearer JWT at the mesh for everything except /health (RequestAuthentication +
+  # AuthorizationPolicy — see templates/authpolicy.yaml). Closes anonymous access to /mcp metadata
+  # (initialize / describe_entities). Requires auth.jwksUri. Closed-by-default: keep this true.
+  requireJwt: true
+  # /mcp is long-lived streamable HTTP. `0s` is rejected by the Istio CRD, so this is a long
+  # finite timeout instead of the ~15s default.
+  mcpTimeout: "1h"
+  destinationRule:
+    enabled: true
+    mtlsMode: ISTIO_MUTUAL
+
+# DAB does not open its port until metadata init against SQL succeeds, so liveness must not
+# fire during that window or a slow DB becomes a restart storm.
+startupProbe:
+  periodSeconds: 10
+  failureThreshold: 30
+  timeoutSeconds: 5       # /health is 1.2-2.7s uncached; the kubelet default of 1s always fails
+
+readinessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 5
+
+livenessProbe:
+  initialDelaySeconds: 20
+  periodSeconds: 20
+
+resources:
+  requests: { cpu: "100m", memory: "256Mi" }
+  limits:   { cpu: "500m", memory: "512Mi" }

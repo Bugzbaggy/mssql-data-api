@@ -1,0 +1,119 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/latest/download/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_GLOBAL_CONFIG')",
+    "options": {
+      "set-session-context": true
+    }
+  },
+  "data-source-files": [
+    "config/dab-config.id.json"
+  ],
+  "runtime": {
+    "rest": { "enabled": true, "path": "/api", "request-body-strict": true },
+    "graphql": { "enabled": true, "path": "/graphql", "allow-introspection": false },
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp",
+      "dml-tools": {
+        "describe-entities": true,
+        "read-records": false,
+        "create-record": false,
+        "update-record": false,
+        "delete-record": false,
+        "execute-entity": true,
+        "aggregate-records": false
+      }
+    },
+    "cache": { "enabled": true, "ttl-seconds": 30 },
+    "host": {
+      "mode": "production",
+      "cors": { "origins": [], "allow-credentials": false },
+      "authentication": {
+        "provider": "EntraID",
+        "jwt": { "audience": "@env('AUTH_JWT_AUDIENCE')", "issuer": "@env('AUTH_JWT_ISSUER')" }
+      }
+    },
+    "telemetry": {
+      "open-telemetry": {
+        "enabled": false,
+        "endpoint": "@env('OTEL_EXPORTER_OTLP_ENDPOINT')",
+        "headers": "@env('OTEL_EXPORTER_OTLP_HEADERS')",
+        "service-name": "appdb-data-api"
+      }
+    }
+  },
+  "entities": {
+    "get_subaccounts_for_account": {
+      "description": "List the sub-accounts under a customer account: SubAccountUid/Id, the products each has enabled, and active flag. Active: 0=inactive, 1=active. Product families: CA=Chat Apps (the messaging channel/Viber/etc.), SM=SMS, VI=Video, VO=Voice, V8=Verify. Global config data (AppCatalog / AppDb, replicated cross-region), so results are the same from any region.",
+      "source": {
+        "object": "core.Account_SubAccount_GetAll",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (uniqueidentifier / GUID). Required.", "required": true, "default": "" },
+          { "name": "UserId", "description": "Optional portal user id (uniqueidentifier / GUID) to scope the list to sub-accounts that user can see. Omit (passed as null) to return all sub-accounts on the account — the SP treats null as 'all'.", "required": false, "default": "null" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 300 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "get_subaccount": {
+      "description": "Get one sub-account's details and settings. Decode result codes: Active 0=inactive, 1=active; ProtectionStatusId (fraud/traffic protection) 0=Disabled, 1=Monitoring, 2=Alerts Enabled; MsgProcessingFlags is an OR-combined bitmask 1=DrReceived, 2=DrSent, 4=DrDeliveredToCarrier, 8=FinalDr, 16=OptOutMo. Product families: CA=Chat Apps, SM=SMS, VI=Video, VO=Voice, V8=Verify. Global config data (AppCatalog / AppDb, replicated).",
+      "source": {
+        "object": "svc.SubAccount_Get",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (uniqueidentifier / GUID). Required.", "required": true, "default": "" },
+          { "name": "SubAccountUid", "description": "Sub-account identifier (integer). Required. Get valid values from get_subaccounts_for_account.", "required": true, "default": "0" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 300 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "get_account_balance": {
+      "description": "Current pre-paid billing balance for a customer account. Amounts are in the account's own billing currency (the result carries the currency). Balance changes constantly, so this tool caches only briefly. Global config data (AppCatalog / AppDb).",
+      "source": {
+        "object": "core.BillingBalance_Get",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (uniqueidentifier / GUID). Required.", "required": true, "default": "" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 30 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "get_channels_config": {
+      "description": "Chat-apps / the messaging channel configuration for a customer account: which channels are provisioned and each channel's state and the messaging channel template review status. Decode the result codes as follows. Channel type (ChannelTypeId): 0/13=SMS, 1=the messaging channel, 2=Facebook, 3=RCS, 4=AppleBusinessChat, 5=Viber, 6=Line, 7=WeChat, 8=Zalo, 9=Kakao, 10=ZaloNotification, 11=Instagram, 12=LineNotification, 14=Call, 15=Mock (two-letter codes: SM/SS, WA, FB, RC, AP, VB, LN, WC, ZL, KK, ZN, LO, IG, VO, MK). Channel status (single char): A=Active, D=Deployment, F=Failed, M=Migration, P=Pending, R=Rejected, S=Stopped, V=Validation. the messaging channel template status: 1=Approved, 2=Pending, 3=Rejected, 4=Pending deletion, 5=Deleted, 6=In appeal, 7=Disabled, 8=Paused. the messaging channel template category (current): 14=UTILITY, 15=AUTHENTICATION, 16=MARKETING (ids 1-13 are deprecated legacy categories). Global config data (AppCatalog / AppDb).",
+      "source": {
+        "object": "core.Channels_ConfigGet",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (uniqueidentifier / GUID). Required.", "required": true, "default": "" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 300 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    }
+  }
+}

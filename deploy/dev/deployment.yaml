@@ -1,0 +1,66 @@
+# appdb-data-api — DEV deployment
+# AWS acct 111111111111 · vpc-0dev00000000000 (dev-msg-apse1-vpc1) · subnet-0dev0private1 (private-1) · ap-southeast-1
+# Target SQL: DEV-NODE1 192.0.2.22:1433 (AppDb_dev, single node)
+# Config: standalone config/dab-config.dev.json (OIDC bearer JWT; caller presents a DEV-environment bearer token, role from `roles` claim)
+# Prereq SG: allow this pod's security group -> 192.0.2.22/32 on TCP 1433 (same VPC, no peering).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appdb-data-api
+  namespace: appdb-data-api
+  labels: { app: appdb-data-api, env: dev }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: appdb-data-api }
+  template:
+    metadata:
+      labels: { app: appdb-data-api, env: dev }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: appdb-data-api
+          # Build from ../../Dockerfile (DAB 2.x, config baked in); push to the dev registry.
+          image: <dev-registry>/appdb-data-api:<tag>
+          # The image ENTRYPOINT is the service and silently ignores a bare
+          # --config-file flag, so the container would load the base prod-shaped
+          # /App/dab-config.json instead. Selecting a config means running the CLI.
+          command: ["dotnet", "/App/Microsoft.DataApiBuilder.dll", "start", "-c", "/App/config/dab-config.dev.json"]
+          ports:
+            - { name: http, containerPort: 5000 }
+          env:
+            # OIDC bearer auth (issuer/audience are public, not secrets). Callers present a DEV-environment
+            # bearer token; role is taken from the token's `roles` claim (must contain appdb-data-api-msg-reader).
+            - { name: AUTH_JWT_ISSUER,   value: "https://<oidc-dev-issuer>.example.com" }
+            - { name: AUTH_JWT_AUDIENCE, value: "appdb-data-api-msg" }   # this API's registered audience (messaging domain)
+          envFrom:
+            - secretRef: { name: appdb-data-api-conn }   # CONN_DEV (from external-secret.yaml)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          readinessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appdb-data-api
+  namespace: appdb-data-api
+spec:
+  selector: { app: appdb-data-api }
+  ports:
+    - { name: http, port: 80, targetPort: 5000 }
+  type: ClusterIP   # front with the platform ingress/AgentCore path → …/mcp

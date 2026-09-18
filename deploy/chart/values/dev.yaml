@@ -1,0 +1,45 @@
+# DEV — appdb-data-api (ONE tool, both domains). EKS dev-eks-cluster, ns appdb-data-api.
+# ONE deployment, STRICT READ-ONLY across BOTH hosts' DBs; the msg/voice boundary is the per-entity
+# role, not a second release (ADR-0005):
+#   - 192.0.2.22  DEV-NODE1  (messaging) -> CONN_DEV_*   keys (9 DBs)  role appdb-data-api-msg-reader
+#   - 192.0.2.28  DEV-VOICE-NODE1     (voice)     -> CONN_DEVVO_* keys (2 DBs)  role appdb-data-api-voi-reader
+# Config: dab-config.dev-all.json (base, entities:{}) links config/dev-all/*.json for BOTH hosts
+#   (each linked file carries its own connection-string + role; DAB enforces the per-entity role).
+# host.mode: development, GraphQL introspection on, UNMASKED (dev test data) — internal zone only.
+#
+# The ingress host below keeps its `-msg` name — it predates the split, and the Route53 record
+# survives the voi decommission (appdb-terragrunt-msg#445 removed only the -voi alias).
+#
+# OIDC provider prerequisite (not this repo): audience `appdb-data-api` registered, issuing msg-reader
+# and/or voi-reader in the roles claim per caller. Audience appdb-data-api-voi is retired.
+
+replicaCount: 1
+
+# Base config at the IMAGE ROOT (/App), so its config/dev-all/*.json data-source-files resolve.
+# Loaded via the CLI command (the entrypoint ignores config flags) — see docs/ci-cd-dev.md §2.
+configFile: /App/dab-config.dev-all.json
+
+auth:
+  jwtIssuer: "https://<oidc-dev-issuer>.example.com"
+  jwtAudience: "appdb-data-api"
+  # OIDC JWKS — Istio RequestAuthentication uses this to validate tokens and reject anonymous /mcp.
+  jwksUri: "https://<oidc-dev-issuer>.example.com/.well-known/jwks.json"
+
+podLabels:
+  env: dev
+
+serviceAccount:
+  roleArn: arn:aws:iam::111111111111:role/dev-msg-apse1-eks-appdb-data-api-eso
+
+# dev-all needs many CONN_* keys (one per DB across both hosts). Rather than one SM secret per
+# key, keep ONE JSON secret whose properties are the CONN_* keys and extract them all. Create it
+# from the generator's printed key list — see deploy/README.md (DEV) and tools/README.md.
+externalSecret:
+  dataFrom:
+    - key: appdb-data-api/dev/connstrings
+
+istio:
+  enabled: true
+  host: appdb-data-api-msg.appdb.dev
+  # Selects ingressgateway-internal; its 443 server is hosts:["*"] with a *.appdb.dev cert.
+  gateway: istio-system/private-gateway

@@ -1,0 +1,48 @@
+{{- if and .Values.istio.enabled .Values.istio.requireJwt }}
+# Reject UNAUTHENTICATED requests at the mesh so /mcp metadata (initialize / tools/list /
+# describe_entities) is not reachable without a valid OIDC bearer JWT. RequestAuthentication validates the
+# token when present; the AuthorizationPolicy then REQUIRES a validated principal for everything but
+# /health. DAB still validates the token and enforces the per-tool role behind this (defense in depth).
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: {{ include "appdb-data-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "appdb-data-api.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "appdb-data-api.selectorLabels" . | nindent 6 }}
+  jwtRules:
+    - issuer: {{ required "auth.jwtIssuer is required when istio.requireJwt is true" .Values.auth.jwtIssuer | quote }}
+      jwksUri: {{ required "auth.jwksUri is required when istio.requireJwt is true — your OIDC provider's {issuer}/.well-known/jwks.json" .Values.auth.jwksUri | quote }}
+      audiences:
+        - {{ required "auth.jwtAudience is required" .Values.auth.jwtAudience | quote }}
+      # Keep the Authorization header so DAB re-validates the token and maps the role (defense in depth).
+      forwardOriginalToken: true
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ include "appdb-data-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "appdb-data-api.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "appdb-data-api.selectorLabels" . | nindent 6 }}
+  action: ALLOW
+  rules:
+    # /health stays open (kubelet probes + status checks; returns no business data).
+    - to:
+        - operation:
+            paths: ["/health"]
+    # Everything else (/mcp, /api, /graphql) requires a validated OIDC bearer JWT principal.
+    # requestPrincipals is populated ONLY when RequestAuthentication validated a token, so a
+    # no-token or bad-token request matches neither rule and Istio returns 403 at the mesh.
+    - from:
+        - source:
+            requestPrincipals: ["*"]
+{{- end }}

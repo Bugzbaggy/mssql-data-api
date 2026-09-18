@@ -1,0 +1,11 @@
+{
+  "repo": "https://github.com/Bugzbaggy/mssql-dba-mcp.git",
+  "sha": "0792f2400165807a2932f8fa2d4481816cdd92e4",
+  "paths": [
+    "server/src",
+    "server/tests",
+    "server/package.json",
+    "server/tsconfig.json"
+  ],
+  "hash": "7d0bdf1343be6a6643428f572d066b19bce0fa244a584648a64d0e2102ebc0f6"
+}

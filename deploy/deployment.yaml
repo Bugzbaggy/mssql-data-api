@@ -1,0 +1,71 @@
+# SUPERSEDED-PENDING. This PROD manifest predates the Helm chart in `chart/` and is stale: it
+# references the raw base image with no config baked in, hard-codes DAB_ENVIRONMENT=Staging, and its
+# comments predate the OIDC-bearer-JWT decision. DEV deploys exclusively from
+# `chart/` + `chart/values/dev.yaml`. When the prod pipeline lands, prod becomes a values file and
+# this is deleted. Do not apply as-is.
+# Also has the runAsNonRoot-with-no-runAsUser defect fixed in chart/templates/deployment.yaml.
+# Stateless appdb-data-api (DAB) Deployment + Service.
+# Secrets come from the k8s Secret created by external-secret.yaml (envFrom) — never baked in.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appdb-data-api
+  namespace: appdb-data-api
+  labels: { app: appdb-data-api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: appdb-data-api }
+  template:
+    metadata:
+      labels: { app: appdb-data-api }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: appdb-data-api
+          # RAW base image, no config baked in — replace with the image built from ../Dockerfile
+          # before using this manifest. Version rationale: ../docs/ci-cd-dev.md §2.
+          image: mcr.microsoft.com/azure-databases/data-api-builder:2.0.9
+          # Per-environment config/auth selection (see deploy/README.md):
+          #   staging -> DAB_ENVIRONMENT=Staging (Simulator, until an OIDC provider is wired up)
+          #   prod    -> remove DAB_ENVIRONMENT   (EntraID + your OIDC provider)
+          #   dev     -> command: [dotnet, /App/Microsoft.DataApiBuilder.dll, start, -c, /App/config/dab-config.dev.json]
+          # No args: the ENTRYPOINT already loads /App/dab-config.json. Any other config needs the
+          # CLI `command:` form above — a bare flag is ignored (../docs/ci-cd-dev.md §2).
+          ports:
+            - { name: http, containerPort: 5000 }
+          envFrom:
+            - secretRef: { name: appdb-data-api-conn }   # CONN_* (+ AUTH_* for prod) as env vars
+          env:
+            - { name: DAB_ENVIRONMENT, value: "Staging" }   # Simulator until an OIDC provider is wired up; remove for prod (EntraID)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          # DAB serves on 5000. TCP probes avoid asserting a specific HTTP health path;
+          # swap to an httpGet on the REST base once your DAB version's health path is confirmed.
+          readinessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appdb-data-api
+  namespace: appdb-data-api
+spec:
+  selector: { app: appdb-data-api }
+  ports:
+    - { name: http, port: 80, targetPort: 5000 }
+  type: ClusterIP   # front with your ingress/gateway; AgentCore calls .../mcp through it

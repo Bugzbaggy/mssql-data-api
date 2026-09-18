@@ -1,0 +1,4 @@
+{
+  "$comment": "Valid JSON, no data-source. jq -r would yield the literal string 'null' here, so the gate must name THIS FILE rather than report a missing secret key called 'null'.",
+  "entities": {}
+}

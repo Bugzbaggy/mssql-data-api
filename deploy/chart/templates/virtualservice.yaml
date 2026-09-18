@@ -1,0 +1,32 @@
+{{- if .Values.istio.enabled }}
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: {{ include "appdb-data-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "appdb-data-api.labels" . | nindent 4 }}
+spec:
+  hosts:
+    - {{ required "istio.host is required when istio.enabled is true" .Values.istio.host }}
+    # Repo convention: also list the bare service name for in-mesh addressing.
+    - {{ include "appdb-data-api.fullname" . }}
+  # Shared, DevOps-owned — never created or mutated here.
+  gateways:
+    - {{ .Values.istio.gateway }}
+  http:
+    # /mcp must not inherit Istio's default timeout or agent calls get cut mid-flight.
+    - match:
+        - uri: { prefix: /mcp }
+      route:
+        - destination:
+            host: {{ include "appdb-data-api.fullname" . }}
+            port: { number: {{ .Values.service.port }} }
+      timeout: {{ .Values.istio.mcpTimeout | quote }}
+    - route:
+        - destination:
+            host: {{ include "appdb-data-api.fullname" . }}
+            port: { number: {{ .Values.service.port }} }
+{{- end }}
+{{/* No RequestAuthentication/AuthorizationPolicy here: DAB already validates the OIDC bearer JWT,
+     and two enforcement points that can disagree is worse than one. */}}

@@ -1,0 +1,62 @@
+{
+  "_README": "STAGING FILE — NOT loaded by DAB (not in data-source-files). These entities are wired and ready but their stored procedures do not exist yet (see ../proposed-procs/). Activate per ../proposed-procs/README.md: after each SP is deployed, move the matching entity into the live config (global_entities -> dab-config.json 'entities'; region_local_entities -> each config/dab-config.<region>.json with a region-prefixed name), then run 'dab validate' and redeploy.",
+  "global_entities": {
+    "get_account": {
+      "description": "Get one customer account's identity, enabled products, currency and status by AccountUid. Enabled-product flags (1=yes): Product_SMS, Product_CA (Chat Apps), Product_VI (Video), Product_VO (Voice), Product_AT, Product_ALERT, Product_Verify, Product_SUBSCRIPTION. Decode: BillingMode PREPAID/POSTPAID/NOPAY; CustomerType (allowed I/L/R/E/W — I=Internal/test, R=Reseller, E=Enterprise, W=Wholesale; verify L); CustomerCategory ENTA/WHLA/WHLB/WHL1/WHL2/VIP; RegionId 0=SG,1=ID,2=UK,3=US. AccountCurrency is ISO 4217. Excludes billing tokens (Stripe/PayPal). Global config data (AppCatalog / AppDb).",
+      "source": {
+        "object": "core.Account_GetByUid",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (uniqueidentifier / GUID). Required.", "required": true, "default": "" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["GET"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 300 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "list_low_balance_accounts": {
+      "description": "List accounts at or below a balance threshold, lowest first, for proactive top-up outreach. Threshold omitted => each account's own LowBalanceThreshold is used. Optionally filter by Currency (ISO 4217). Amounts are in each account's wallet Currency. Global config data (AppCatalog / AppDb).",
+      "source": {
+        "object": "core.Account_ListLowBalance",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "Threshold", "description": "Balance at/under which to include an account (decimal). Omit (null) to use each wallet's own LowBalanceThreshold.", "required": false, "default": "null" },
+          { "name": "Currency", "description": "Optional ISO 4217 currency filter (e.g. USD). Omit (null) for all currencies.", "required": false, "default": "null" },
+          { "name": "MaxRows", "description": "Max accounts to return (default 200).", "required": false, "default": "200" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["GET"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 60 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    }
+  },
+  "region_local_entities": {
+    "_note": "Add to each config/dab-config.<region>.json with a region-prefixed entity name, e.g. id_get_sms_by_umid. This is the TRUE single-UMID lookup (only @Umid needed) that the BQ-backed id_search_sms cannot provide.",
+    "get_sms_by_umid": {
+      "description": "Fast single-message lookup by UMID alone from the live SMS log (region-local), PII masked by default. Unlike id_search_sms (the cloud data warehouse, account+timeframe-scoped), this needs only a UMID — UMID is the clustered PK on msg.MessageLog so it is a direct seek. Decode StatusId via the 10-level model (0=UNKNOWN..50=READ); SmsTypeId 0=MO,1=MT,2=RCS_MO,3=RCS_MT_TEXT,4=RCS_MT_MEDIA. Excludes commercial price/cost. Region-local (AppDb_Data).",
+      "source": {
+        "object": "msg.MessageLog_GetByUmid",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "Umid", "description": "Unique message id (uniqueidentifier / GUID). Required.", "required": true, "default": "" },
+          { "name": "MaskSensitiveData", "description": "Keep true to mask destination MSISDN and withhold message Body. Only false with explicit authorization.", "required": false, "default": "true" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["GET"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 15 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    }
+  }
+}

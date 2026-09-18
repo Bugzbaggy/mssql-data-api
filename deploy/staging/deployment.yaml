@@ -1,0 +1,68 @@
+# SUPERSEDED-PENDING. Predates the Helm chart in `../chart/`. Known defects: AUTH_JWT_ISSUER is
+# still a placeholder, and runAsNonRoot with no runAsUser (fixed in ../chart/templates/deployment.yaml).
+# Staging may also be affected by the overlay-vs-base issue noted in
+# ../docs/ci-cd-dev.md §11. When the staging pipeline lands this becomes chart/values/staging.yaml.
+# appdb-data-api — STAGING deployment
+# AWS acct 222222222222 · vpc-0stg00000000000 (st-msg-apse1-vpc1) · subnet-0stg0private1 / subnet-0stg0private2 (private-1/2) · ap-southeast-1
+# Target SQL: stg-ag1 via listener ag-staging-listener (AppCatalog + AppDb_Data; nodes 192.0.2.29 / 192.0.2.29)
+# Config: base dab-config.json + DAB_ENVIRONMENT=Staging (dab-config.Staging.json → EntraID provider, ordinary OIDC bearer JWT; caller presents a STG-environment OIDC bearer token)
+# Prereq SG: allow this pod's security group -> the AG nodes (192.0.2.29, 192.0.2.29) on TCP 1433.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: appdb-data-api
+  namespace: appdb-data-api
+  labels: { app: appdb-data-api, env: staging }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: appdb-data-api }
+  template:
+    metadata:
+      labels: { app: appdb-data-api, env: staging }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: appdb-data-api
+          # Build from ../../Dockerfile (DAB 2.x, config baked in); push to the staging registry.
+          image: <staging-registry>/appdb-data-api:<tag>
+          # No args: the ENTRYPOINT already loads the prod-shaped base /App/dab-config.json.
+          env:
+            - { name: DAB_ENVIRONMENT, value: "Staging" }   # merges dab-config.Staging.json → OIDC bearer JWT (EntraID provider)
+            # OIDC bearer auth (issuer/audience are public, not secrets). Callers present a STG-environment
+            # bearer token; role is taken from the token's `roles` claim (must contain appdb-data-api-msg-reader).
+            - { name: AUTH_JWT_ISSUER,   value: "<oidc-stg-issuer-url>" }   # TODO: still a placeholder — fill in once a staging OIDC issuer is registered
+            - { name: AUTH_JWT_AUDIENCE, value: "appdb-data-api-msg" }   # this API's registered audience (messaging domain)
+          ports:
+            - { name: http, containerPort: 5000 }
+          envFrom:
+            - secretRef: { name: appdb-data-api-conn }   # CONN_GLOBAL_CONFIG + CONN_ID_MSGDATA
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          readinessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: appdb-data-api
+  namespace: appdb-data-api
+spec:
+  selector: { app: appdb-data-api }
+  ports:
+    - { name: http, port: 80, targetPort: 5000 }
+  type: ClusterIP   # front with the platform ingress/AgentCore path → …/mcp

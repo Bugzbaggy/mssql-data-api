@@ -1,0 +1,38 @@
+# EC2 deploy (Docker Compose) — appdb-data-api-msg
+# A fast path: run the DAB container on an EC2 box
+# next to the existing SQL-MCP EC2 in the messaging DEV account (111111111111). Kubernetes
+# (deploy/chart, deploy/staging) or ECS come later; this is for dev/PoC testing.
+#
+# On the EC2:
+#   cp .env.ec2-dev.example .env         # fill CONN_DEV + AUTH_JWT_ISSUER; .env is gitignored
+#   docker compose -f docker-compose.yml up -d --build
+#   curl -s http://localhost:5000/health | jq .   # 200 = process up; DB verdict is in the body only
+# Tool URL to register with AgentCore / the OIDC provider = http://<ec2-private-ip>:5000/mcp
+services:
+  appdb-data-api:
+    build:
+      context: ../..            # appdb-data-api/ — bakes dab-config*.json + config/ into the image
+      dockerfile: Dockerfile
+    image: appdb-data-api-msg:dev
+    container_name: appdb-data-api-msg
+    # DEV: standalone dev config (single AppDb_dev, _v5 SMS proc — UNMASKED, test data only).
+    # Override entrypoint too: compose `command:` only replaces CMD, and the image ENTRYPOINT is
+    # the service, which ignores config flags. See docs/ci-cd-dev.md §2.
+    entrypoint: ["dotnet", "/App/Microsoft.DataApiBuilder.dll"]
+    command: ["start", "-c", "/App/config/dab-config.dev.json"]
+    ports:
+      - "5000:5000"             # SG: allow inbound 5000 only from AgentCore's source
+    env_file:
+      - .env                    # CONN_DEV + AUTH_JWT_ISSUER + AUTH_JWT_AUDIENCE (never commit real secrets)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+# ── STAGING variant (prod-shaped, EC2) ───────────────────────────────────────
+# 1. Remove BOTH `entrypoint:` and `command:` above (staging uses the baked base dab-config.json).
+# 2. In .env set:  DAB_ENVIRONMENT=Staging
+#                  CONN_GLOBAL_CONFIG=Server=ag-staging-listener,1433;Database=AppCatalog;...ApplicationIntent=ReadOnly;MultiSubnetFailover=True;...
+#                  CONN_ID_MSGDATA=Server=ag-staging-listener,1433;Database=AppDb_Data;...ApplicationIntent=ReadOnly;MultiSubnetFailover=True;...
+# 3. image: appdb-data-api-msg:stg   (retag so dev/stg images don't collide)

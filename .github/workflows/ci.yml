@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gates:
+    name: Config gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make gates executable
+        run: chmod +x ci/*.sh ci/tests/*.sh
+
+      - name: Config JSON is well-formed
+        run: |
+          status=0
+          for f in dab-config.json dab-config.Staging.json dab-config.dev-all.json \
+                   config/dab-config.*.json config/dev-all/*.json; do
+            [ -e "$f" ] || continue
+            if jq empty "$f" 2>/dev/null; then
+              echo "ok   $f"
+            else
+              echo "::error file=$f::not valid JSON"; status=1
+            fi
+          done
+          exit $status
+
+      # NOTE: ci/validate-base.sh is deliberately NOT run here. It is a *live*
+      # pre-deploy tool: it reads connection strings from AWS Secrets Manager and
+      # runs `dab validate` inside the DAB container, so it needs AWS credentials
+      # and DAB_IMAGE. It also takes <secret-id> <config.json> - the previous
+      # workflow passed it a single argument, so it could never have succeeded.
+
+      # The gates do NOT share a signature. Passing dab-config.json to every one
+      # (as the previous workflow did) hands a config file to gates that expect a
+      # built image ref or a directory root. Each is invoked per its own contract.
+      - name: Gate DEV-ALL-TREE
+        run: ./ci/gate-dev-all-tree.sh
+
+      - name: Gate VENDOR-DRIFT
+        run: ./ci/gate-vendor-drift.sh
+
+      - name: Gate DML-TOOLS
+        run: ./ci/gate-dml-tools.sh dab-config.json config/dab-config.dev.json
+
+      - name: Gate RBAC
+        run: ./ci/gate-rbac.sh dab-config.json config/dab-config.dev.json
+
+      - name: Gate NO-WRITE-TOOLS
+        run: ./ci/gate-no-write-tools.sh
+
+      - name: Gate CONN-KEYS
+        run: ./ci/gate-conn-keys.sh
+
+      - name: Gate CONFIG-FLAG
+        run: ./ci/gate-config-flag.sh
+
+      - name: Gate VERSION
+        run: ./ci/gate-version.sh
+
+      # ci/gate-image-uid.sh takes <built-image-ref> and inspects the image's
+      # Config.User, so it needs a built container. It belongs to the deploy
+      # pipeline, not to this build-free CI.
+
+  gate-tests:
+    name: Gate self-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make executable
+        run: chmod +x ci/*.sh ci/tests/*.sh
+      - name: Run gate self-tests
+        run: ./ci/tests/run-gate-tests.sh
+
+  chart-tests:
+    name: Chart tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+      - name: Make executable
+        run: chmod +x ci/*.sh ci/tests/*.sh
+      - name: Run chart tests
+        run: ./ci/tests/run-chart-tests.sh
+
+  leak-scan:
+    name: No internal identifiers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan
+        run: bash ci/leak-scan.sh
+
+  vendor:
+    name: Vendor tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make executable
+        run: chmod +x ci/*.sh ci/tests/*.sh
+      - name: Run vendor tests
+        run: ./ci/tests/run-vendor-tests.sh
+
+  stack-smoke:
+    name: Stack smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring the stack up
+        run: |
+          cp .env.stack.example .env.stack
+          docker compose --env-file .env.stack -f docker-compose.stack.yml up -d --build
+
+      # A fixed sleep hides a slow start as a pass or a fast one as wasted minutes.
+      # dab-mcp's comprehensive /health returns 403 in production mode unless
+      # runtime.health.roles is configured in dab-config.json (out of scope here),
+      # so we poll its basic "/" endpoint instead, which is always public and
+      # returns {"status":"Healthy",...}.
+      - name: Wait for both endpoints
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/health >/dev/null 2>&1 \
+            && curl -fsS http://localhost:5000/ >/dev/null 2>&1; then
+              echo "both endpoints up after ${i}0s"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::endpoints did not come up"; exit 1
+
+      # Tool-listing is intentionally not asserted here: the Streamable HTTP
+      # transport rejects a bare POST /mcp without a prior initialize handshake
+      # and session header, so a tools/list call would fail for a reason
+      # unrelated to whether the stack itself is up. The two readiness checks
+      # above plus the overlay validation below are this job's deliverable.
+
+      - name: Fleet overlay parses
+        # Both fleet-mode variables are required by docker-compose.fleet.yml on
+        # purpose: inheriting either demo value would point a fleet deployment at
+        # the throwaway sqlserver container. Placeholders are enough to prove the
+        # overlay renders - nothing connects here.
+        run: |
+          CONN_GLOBAL_CONFIG=x CONN_ID_MSGDATA=y \
+          docker compose --env-file .env.stack \
+            -f docker-compose.stack.yml -f docker-compose.fleet.yml config >/dev/null
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --env-file .env.stack -f docker-compose.stack.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose --env-file .env.stack -f docker-compose.stack.yml down -v

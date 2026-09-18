@@ -1,0 +1,28 @@
+# Overlay: point the stack at a real fleet instead of the demo container.
+#
+#   docker compose --env-file .env.stack \
+#     -f docker-compose.stack.yml -f docker-compose.fleet.yml up dab-mcp dba-mcp
+#
+# Name dab-mcp and dba-mcp explicitly: `up` with no services would still start
+# sqlserver and seed, which this overlay cannot remove.
+#
+# fleet.json holds topology only - hosts, ports, databases. Credentials resolve from
+# SQL_USER / SQL_PASSWORD, so no secret is ever written into it.
+services:
+  dab-mcp:
+    depends_on: !reset []
+    environment:
+      CONN_GLOBAL_CONFIG: ${CONN_GLOBAL_CONFIG:?set CONN_GLOBAL_CONFIG for fleet mode}
+      # Without this override, CONN_ID_MSGDATA inherits docker-compose.stack.yml's demo
+      # value, which points at the `sqlserver` container - not running in fleet mode. DAB
+      # loads it as a second data source (see dab-config.json's data-source-files) and
+      # blocks forever on the invalid connection string, so it must be required here too.
+      CONN_ID_MSGDATA: ${CONN_ID_MSGDATA:?set CONN_ID_MSGDATA for fleet mode}
+
+  dba-mcp:
+    depends_on: !reset []
+    volumes:
+      - ${FLEET_FILE:-./fleet.json}:/app/fleet.json:ro
+    environment:
+      INSTANCES: !reset null
+      INSTANCES_FILE: /app/fleet.json

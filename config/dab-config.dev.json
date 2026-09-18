@@ -1,0 +1,160 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/latest/download/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_DEV')",
+    "options": { "set-session-context": true },
+    "health": { "enabled": true, "threshold-ms": 3000 }
+  },
+  "runtime": {
+    "health": { "enabled": true, "roles": ["anonymous"], "cache-ttl-seconds": 5 },
+    "rest": { "enabled": true, "path": "/api", "request-body-strict": true },
+    "graphql": { "enabled": true, "path": "/graphql", "allow-introspection": true },
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp",
+      "dml-tools": {
+        "describe-entities": true,
+        "read-records": false,
+        "create-record": false,
+        "update-record": false,
+        "delete-record": false,
+        "execute-entity": true,
+        "aggregate-records": false
+      }
+    },
+    "cache": { "enabled": true, "ttl-seconds": 30 },
+    "host": {
+      "mode": "development",
+      "cors": { "origins": [], "allow-credentials": false },
+      "authentication": {
+        "provider": "EntraID",
+        "jwt": { "audience": "@env('AUTH_JWT_AUDIENCE')", "issuer": "@env('AUTH_JWT_ISSUER')" }
+      }
+    },
+    "telemetry": {
+      "open-telemetry": {
+        "enabled": false,
+        "endpoint": "@env('OTEL_EXPORTER_OTLP_ENDPOINT')",
+        "headers": "@env('OTEL_EXPORTER_OTLP_HEADERS')",
+        "service-name": "appdb-data-api-dev"
+      }
+    }
+  },
+  "entities": {
+    "get_subaccounts_for_account": {
+      "description": "List the sub-accounts under a customer account: SubAccountUid/Id, products enabled, active flag. Active 0=inactive/1=active; product families CA=Chat Apps, SM=SMS, VI=Video, VO=Voice, V8=Verify. DEV (AppDb_dev).",
+      "source": {
+        "object": "core.Account_SubAccount_GetAll",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (uniqueidentifier / GUID). Required.", "required": true, "default": "" },
+          { "name": "UserId", "description": "Optional portal user id (GUID). Omit (null) to return all sub-accounts on the account.", "required": false, "default": "null" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 300 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "get_subaccount": {
+      "description": "Get one sub-account's details/settings. Active 0/1; ProtectionStatusId 0=Disabled/1=Monitoring/2=Alerts; MsgProcessingFlags OR-bitmask 1=DrReceived,2=DrSent,4=DrDeliveredToCarrier,8=FinalDr,16=OptOutMo. DEV (AppDb_dev).",
+      "source": {
+        "object": "svc.SubAccount_Get",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (GUID). Required.", "required": true, "default": "" },
+          { "name": "SubAccountUid", "description": "Sub-account identifier (int). Required.", "required": true, "default": "0" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 300 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "get_account_balance": {
+      "description": "Current pre-paid billing balance for an account, in the account's currency. DEV (AppDb_dev).",
+      "source": {
+        "object": "core.BillingBalance_Get",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (GUID). Required.", "required": true, "default": "" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 30 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "get_channels_config": {
+      "description": "Chat-apps/the messaging channel config for an account. ChannelTypeId: 0/13=SMS,1=the messaging channel,2=Facebook,3=RCS,4=AppleBusinessChat,5=Viber,6=Line,7=WeChat,8=Zalo,9=Kakao,10=ZaloNotification,11=Instagram,12=LineNotification,14=Call,15=Mock. Channel status A=Active,D=Deployment,F=Failed,M=Migration,P=Pending,R=Rejected,S=Stopped,V=Validation. the messaging channel template status 1=Approved,2=Pending,3=Rejected,4=Pending deletion,5=Deleted,6=In appeal,7=Disabled,8=Paused; category 14=UTILITY,15=AUTHENTICATION,16=MARKETING. DEV (AppDb_dev).",
+      "source": {
+        "object": "core.Channels_ConfigGet",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account identifier (GUID). Required.", "required": true, "default": "" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 300 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "id_search_sms": {
+      "description": "Search SMS in DEV within an account + time window. Account- and timeframe-SCOPED: AccountUid, UserId, TimeframeStart, TimeframeEnd are ALL required; pass UMID to narrow to one message. Decode StatusId 10-level model (0=UNKNOWN..20=SENT..40=DELIVERED..50=READ); SmsTypeId 0=MO,1=MT,2=RCS_MO,3=RCS_MT_TEXT,4=RCS_MT_MEDIA. Backed by core.MessageLog_SearchByFilter_v5. NOTE: v5 has NO MaskSensitiveData param, so results are unmasked — DEV test data only. DEV (AppDb_dev).",
+      "source": {
+        "object": "core.MessageLog_SearchByFilter_v5",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account to search within (GUID). REQUIRED.", "required": true, "default": "" },
+          { "name": "UserId", "description": "Portal user id (GUID) scoping accessible sub-accounts. REQUIRED.", "required": true, "default": "" },
+          { "name": "TimeframeStart", "description": "Start of window (UTC datetime, ISO 8601). REQUIRED. Keep it tight — the cloud data warehouse scan.", "required": true, "default": "" },
+          { "name": "TimeframeEnd", "description": "End of window (UTC datetime, ISO 8601). REQUIRED.", "required": true, "default": "" },
+          { "name": "UMID", "description": "Optional: narrow to a single message id (GUID).", "required": false, "default": "null" },
+          { "name": "MSISDN", "description": "Optional destination number (digits only).", "required": false, "default": "null" },
+          { "name": "SmsTypeId", "description": "Optional message-type filter (0=MO,1=MT,2=RCS_MO,3=RCS_MT_TEXT,4=RCS_MT_MEDIA).", "required": false, "default": "null" },
+          { "name": "StatusIds", "description": "Optional comma-separated StatusId filter (e.g. '40,50').", "required": false, "default": "null" },
+          { "name": "Limit", "description": "Max rows to return.", "required": false, "default": "50" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 15 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "id_lookup_sms_region_by_umid": {
+      "description": "Resolve which region a UMID belongs to (fast router lookup; RegionName only, no body). DEV (AppDb_dev).",
+      "source": {
+        "object": "msg.MessageRegionLookup_Get",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "Umid", "description": "Unique message id (GUID) to resolve. Required.", "required": true, "default": "" },
+          { "name": "ConnUid", "description": "Alternate key (connection uid); the SP requires it but ignores it when Umid is set, so a dummy 0 is passed.", "required": false, "default": "0" },
+          { "name": "CorrelationId", "description": "Alternate key (connector message id); the SP requires it but ignores it when Umid is set, so an empty string is passed.", "required": false, "default": "" }
+        ]
+      },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 30 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    }
+  }
+}

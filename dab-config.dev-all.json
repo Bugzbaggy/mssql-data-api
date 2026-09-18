@@ -1,0 +1,56 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/latest/download/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_DEV_AppDb_MSG_DEV')",
+    "options": {
+      "set-session-context": true
+    }
+  },
+  "data-source-files": [
+    "config/dev-all/dab-config.dev-all.mno.json",
+    "config/dev-all/dab-config.dev-all.vo.mno.json"
+  ],
+  "runtime": {
+    "rest": {
+      "enabled": true,
+      "path": "/api"
+    },
+    "graphql": {
+      "enabled": true,
+      "path": "/graphql",
+      "allow-introspection": true
+    },
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp",
+      "dml-tools": {
+        "describe-entities": true,
+        "read-records": true,
+        "create-record": false,
+        "update-record": false,
+        "delete-record": false,
+        "execute-entity": true,
+        "aggregate-records": true
+      }
+    },
+    "cache": {
+      "enabled": false
+    },
+    "host": {
+      "mode": "production",
+      "cors": {
+        "origins": [],
+        "allow-credentials": false
+      },
+      "authentication": {
+        "provider": "EntraID",
+        "jwt": {
+          "audience": "@env('AUTH_JWT_AUDIENCE')",
+          "issuer": "@env('AUTH_JWT_ISSUER')"
+        }
+      }
+    }
+  },
+  "entities": {}
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/latest/download/dab.draft.schema.json",
+  "runtime": {
+    "host": {
+      "authentication": {
+        "provider": "EntraID",
+        "jwt": { "audience": "@env('AUTH_JWT_AUDIENCE')", "issuer": "@env('AUTH_JWT_ISSUER')" }
+      }
+    }
+  }
+}

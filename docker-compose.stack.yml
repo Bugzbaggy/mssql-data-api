@@ -1,0 +1,112 @@
+# The full stack: SQL Server, the DAB MCP endpoint (application data) and the DBA MCP
+# endpoint (diagnostics). Two endpoints, two security postures - DAB never exposes a raw
+# table, the DBA server never reads application data.
+#
+#   docker compose --env-file .env.stack -f docker-compose.stack.yml up
+#
+# Against a real fleet instead of the container, add the overlay:
+#   docker compose --env-file .env.stack \
+#     -f docker-compose.stack.yml -f docker-compose.fleet.yml up dab-mcp dba-mcp
+services:
+  sqlserver:
+    # Pinned (not :2022-latest): a floating tag makes the demo stack's SQL Server
+    # version change out from under us on every pull, on the same reproducibility axis
+    # finding 1 (npm ci) and .upstream (the vendor pin) exist to close. Verified to
+    # exist with `docker manifest inspect` before committing.
+    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+    container_name: stack-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  seed:
+    # mcr.microsoft.com/mssql-tools:latest ships the deprecated pre-18 tools and is
+    # unpinned. Its replacement, mssql-tools18, is NOT published as its own MCR image
+    # (`docker manifest inspect mcr.microsoft.com/mssql-tools18:latest` / `docker pull`
+    # both come back "not found") - from SQL Server 2022 CU14 / 2019 CU28 onward it ships
+    # bundled inside the server image itself, which is exactly what the healthcheck above
+    # already assumes at /opt/mssql-tools18/bin/sqlcmd. So the seed step reuses the same
+    # pinned sqlserver image rather than pulling a second, separately-versioned one.
+    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+    container_name: stack-seed
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    volumes:
+      - ./seed:/seed:ro
+    entrypoint: >
+      /bin/bash -c "/opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa
+      -P \"$$MSSQL_SA_PASSWORD\" -C -i /seed/01-demo-schema.sql"
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    restart: "no"
+
+  dab-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stack-dab-mcp
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "${DAB_MCP_PORT:-5000}:5000"
+    environment:
+      CONN_GLOBAL_CONFIG: "Server=sqlserver,1433;Database=AppDb_Demo;User ID=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      # The base dab-config.json also loads config/dab-config.id.json as a second data
+      # source (data-source-files), which requires its own connection string. Without it
+      # DAB loops forever on "A valid Connection String should be provided" and /health
+      # never turns healthy. The demo stack has only one database, so point this at the
+      # same container/database as CONN_GLOBAL_CONFIG - enough for DAB to start and report
+      # healthy; the region-specific entities in that file query objects this demo schema
+      # does not have, which is fine, nothing in this stack calls them.
+      CONN_ID_MSGDATA: "Server=sqlserver,1433;Database=AppDb_Demo;User ID=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+      # host.mode is "production" in the base config, which wires the ASP.NET JWT bearer
+      # handler unconditionally - even /health goes through AuthenticationMiddleware. With
+      # AUTH_JWT_AUDIENCE/AUTH_JWT_ISSUER unset (@env(...) -> empty string) the handler's
+      # PostConfigure throws "MetadataAddress or Authority must use HTTPS" on the very
+      # first request and every request 500s. A well-formed https:// issuer is enough to
+      # satisfy that check at options-creation time; it is never actually queried unless a
+      # bearer token arrives, so this placeholder is safe for a token-less demo stack.
+      AUTH_JWT_AUDIENCE: "appdb-data-api-demo"
+      AUTH_JWT_ISSUER: "https://oidc.example.com/"
+    restart: unless-stopped
+
+  dba-mcp:
+    build:
+      context: ./services/dba-mcp
+    container_name: stack-dba-mcp
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "${DBA_MCP_PORT:-3000}:3000"
+    environment:
+      MCP_TRANSPORT: http
+      MCP_BIND_HOST: 0.0.0.0
+      PORT: "3000"
+      TOOLSET: dba
+      SQL_USER: ${DBA_MCP_USER}
+      # Resolved by the server from this env var at connect time — see R6 note below.
+      SQL_PASSWORD: ${DBA_MCP_PASSWORD}
+      # credentialPolicy.ts refuses to boot when INSTANCES carries a literal (non-empty,
+      # non-placeholder) password: a real secret must never live in config on disk. Compose
+      # interpolates ${DBA_MCP_PASSWORD} into a literal before the container ever sees it,
+      # which is exactly the case the policy rejects. So the password field here must carry
+      # the LITERAL placeholder string "${SQL_PASSWORD}" through to the container — escaped
+      # as $${SQL_PASSWORD} so Compose emits a literal `$` instead of interpolating it. The
+      # server then resolves the real value from the SQL_PASSWORD env var above.
+      INSTANCES: >-
+        [{"name":"local","host":"sqlserver","port":1433,
+          "user":"${DBA_MCP_USER}","password":"$${SQL_PASSWORD}",
+          "database":"master","trustServerCertificate":true}]
+    restart: unless-stopped

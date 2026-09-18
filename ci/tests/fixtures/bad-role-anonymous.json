@@ -1,0 +1,13 @@
+{
+  "_comment": "Gate RBAC negative fixture. An 'anonymous' role slipped in alongside the legitimate one — DAB 2.0 role inheritance cannot widen access, so a stray role here IS the exposure. Not a real config; only the shape Gate RBAC walks.",
+  "entities": {
+    "get_account_balance": {
+      "type": "stored-procedure",
+      "source": { "object": "core.BillingBalance_Get", "type": "stored-procedure" },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] },
+        { "role": "anonymous", "actions": ["execute"] }
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{{- if and .Values.istio.enabled .Values.istio.destinationRule.enabled }}
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: {{ include "appdb-data-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "appdb-data-api.labels" . | nindent 4 }}
+spec:
+  host: {{ include "appdb-data-api.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: {{ .Values.istio.destinationRule.mtlsMode }}
+{{- end }}
