@@ -4,7 +4,7 @@
 # ../docs/ci-cd-dev.md §11. When the staging pipeline lands this becomes chart/values/staging.yaml.
 # appdb-data-api — STAGING deployment
 # AWS acct 222222222222 · vpc-0stg00000000000 (st-msg-apse1-vpc1) · subnet-0stg0private1 / subnet-0stg0private2 (private-1/2) · ap-southeast-1
-# Target SQL: stg-ag1 via listener ag-staging-listener (AppCatalog + AppDb_Data; nodes 192.0.2.29 / 192.0.2.29)
+# Target SQL: ag-staging1 via listener ag-staging-listener (AppCatalog + AppDb_Data; nodes 192.0.2.29 / 192.0.2.30)
 # Config: base dab-config.json + DAB_ENVIRONMENT=Staging (dab-config.Staging.json → EntraID provider, ordinary OIDC bearer JWT; caller presents a STG-environment OIDC bearer token)
 # Prereq SG: allow this pod's security group -> the AG nodes (192.0.2.29, 192.0.2.29) on TCP 1433.
 apiVersion: apps/v1

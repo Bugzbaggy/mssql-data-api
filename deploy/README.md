@@ -9,7 +9,7 @@ connection strings (which contain the SQL password) and the inbound JWT settings
 |---|---|
 | `01-create-login-and-grants.sql` | **PROD**: least-privilege `svc_dataapi` login (every replica, matching SID) + `role_svc_dataapi` + EXECUTE grants (once per AG-database primary). Includes the ID/UK read-only-routing fix. |
 | `02-dev-create-login-and-grants.sql` | **DEV** (`DEV-NODE1`, single node): login + grants in `AppDb_dev` on the 6 dev procs (SMS = `…BQ_v5`). No SID matching. |
-| `03-staging-create-login-and-grants.sql` | **STAGING** (`stg-ag1`, 2-node AG): login on both nodes (matching SID) + grants in `AppCatalog` (global) and `AppDb_Data` (SMS, `…BQ_v2`) on the primary. |
+| `03-staging-create-login-and-grants.sql` | **STAGING** (`ag-staging1`, 2-node AG): login on both nodes (matching SID) + grants in `AppCatalog` (global) and `AppDb_Data` (SMS, `…BQ_v2`) on the primary. |
 | `external-secret.yaml` | **PROD** External Secrets Operator → pulls `CONN_*` / `AUTH_*` from AWS Secrets Manager into a k8s Secret. |
 | `deployment.yaml` | **PROD** stateless Deployment + Service. **SUPERSEDED-PENDING — do not apply as-is** (see the banner in the file): stale base image and a hard-coded `DAB_ENVIRONMENT=Staging`. Becomes `chart/values/prod.yaml` when the prod pipeline lands. |
 | `chart/` | **The deployable.** One Helm chart for every environment; DEV is `chart/values/dev.yaml`. Replaces the former `dev/` manifests, which are deleted. Installed by `.github/workflows/appdb-data-api.yml`. |

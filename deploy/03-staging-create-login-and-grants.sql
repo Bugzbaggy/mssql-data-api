@@ -1,10 +1,10 @@
 /* ============================================================================
-   appdb-data-api — STAGING least-privilege login + grants  (stg-ag1)
+   appdb-data-api — STAGING least-privilege login + grants  (ag-staging1)
    ----------------------------------------------------------------------------
    Staging is a 2-node AG (ST-MSG-REGION1-NODE1 / ST-MSG-REGION1-NODE2) and prod-shaped:
      - global tools live in AppCatalog
      - region-local SMS tools live in AppDb_Data  (v2, same as prod)
-   Verified 2026-07-22: both AppCatalog and AppDb_Data are in AG 'stg-ag1',
+   Verified 2026-07-22: both AppCatalog and AppDb_Data are in AG 'ag-staging1',
    so DB-level user/role/grants REPLICATE to the secondary — create them ONCE on
    the AG PRIMARY. A LOGIN is a server principal and does NOT replicate — create it
    on BOTH nodes with a MATCHING SID. Replace <StrongPwd> from the staging secret store.
@@ -62,5 +62,5 @@ GO
        ApplicationIntent=ReadOnly;MultiSubnetFailover=True;Encrypt=True;TrustServerCertificate=False;Application Name=appdb-data-api
      CONN_ID_MSGDATA    = Server=ag-staging-listener,1433;Database=AppDb_Data;User ID=svc_dataapi;Password=<StrongPwd>;
        ApplicationIntent=ReadOnly;MultiSubnetFailover=True;Encrypt=True;TrustServerCertificate=False;Application Name=appdb-data-api
-   NOTE: stg-ag1 has NO READ_ONLY_ROUTING_URL configured (checked 2026-07-22) — ApplicationIntent=ReadOnly
+   NOTE: ag-staging1 has NO READ_ONLY_ROUTING_URL configured (checked 2026-07-22) — ApplicationIntent=ReadOnly
    reads land on the PRIMARY (fine for testing; configure routing later if you want secondary offload). */
