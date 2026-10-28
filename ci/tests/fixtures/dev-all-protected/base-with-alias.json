@@ -1,0 +1,28 @@
+{
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_DEV_AppDb_MSG_DEV')"
+  },
+  "entities": {
+    "msg_core_vwAccountContact": {
+      "source": {
+        "object": "core.vwAccountContact",
+        "type": "view",
+        "key-fields": [
+          "AccountUid"
+        ]
+      },
+      "rest": {
+        "enabled": true
+      },
+      "permissions": [
+        {
+          "role": "appdb-data-api-msg-reader",
+          "actions": [
+            "read"
+          ]
+        }
+      ]
+    }
+  }
+}

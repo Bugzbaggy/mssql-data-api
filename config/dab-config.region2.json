@@ -1,0 +1,59 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/latest/download/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_REGION2_MSGDATA')",
+    "options": {
+      "set-session-context": true
+    }
+  },
+  "entities": {
+    "region2_search_sms": {
+      "description": "Search SMS in region2 within a customer account and time window, PII masked by default. Backed by the data warehouse. This proc is account- and timeframe-SCOPED: AccountUid, UserId, and a TimeframeStart/TimeframeEnd window are ALL required (bounds the query and enforces access) — it is NOT a global by-UMID lookup. To narrow to one message, also pass UMID. For a pure single-message lookup by UMID alone (no account/timeframe), use the direct msg.MessageLog_GetByUmid tool (see config/dab-config.pending.json) once deployed. StatusId and MessageTypeId are coded values; decode them with your status and message-type lookups. Region-local (AppDb_Data), vetted SP — not raw msg.MessageLog access.",
+      "source": {
+        "object": "core.MessageLog_SearchByFilter_v2",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "AccountUid", "description": "Customer account to search within (uniqueidentifier / GUID). REQUIRED — the proc is account-scoped.", "required": true, "default": "" },
+          { "name": "UserId", "description": "Portal user id (uniqueidentifier / GUID) whose accessible sub-accounts scope the results (via core.fnSubAccount_GetByUser). REQUIRED. NOTE: an Ops/Eng caller must supply a UserId that has access to the account, or results are empty — confirm the intended value for non-portal callers.", "required": true, "default": "" },
+          { "name": "TimeframeStart", "description": "Start of the search window (UTC datetime, ISO 8601). REQUIRED. Keep the window tight around the expected message time — this is a the cloud data warehouse scan.", "required": true, "default": "" },
+          { "name": "TimeframeEnd", "description": "End of the search window (UTC datetime, ISO 8601). REQUIRED.", "required": true, "default": "" },
+          { "name": "UMID", "description": "Optional: narrow to a single message by its unique message id (uniqueidentifier / GUID).", "required": false, "default": "null" },
+          { "name": "MSISDN", "description": "Optional destination number filter (digits only, E.164 without +).", "required": false, "default": "null" },
+          { "name": "MessageTypeId", "description": "Optional message-type filter (a MessageTypeId code).", "required": false, "default": "null" },
+          { "name": "StatusIds", "description": "Optional comma-separated StatusId filter (e.g. '40,50').", "required": false, "default": "null" },
+          { "name": "MaskSensitiveData", "description": "Mask PII (destination last-4, redact body). Defaults to true here; the underlying SP defaults to UNMASKED, so keep true unless explicitly authorized.", "required": false, "default": "true" },
+          { "name": "Limit", "description": "Max rows to return (SP caps apply).", "required": false, "default": "50" }
+        ]
+      },
+      "health": { "enabled": false },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 15 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "region2_lookup_sms_region_by_umid": {
+      "description": "Resolve which region a UMID belongs to in region2 (fast router lookup; returns RegionName only, no message body). Use this first when you don't yet know where a message lives. Region-local (AppDb_Data).",
+      "source": {
+        "object": "msg.MessageRegionLookup_Get",
+        "type": "stored-procedure",
+        "parameters": [
+          { "name": "Umid", "description": "Unique message id (uniqueidentifier / GUID) to resolve. Provide this for the normal lookup path.", "required": true, "default": "" },
+          { "name": "ConnUid", "description": "Alternate key (connection uid); the SP requires it but ignores it when Umid is set, so a dummy 0 is passed.", "required": false, "default": "0" },
+          { "name": "CorrelationId", "description": "Alternate key (connector message id); the SP requires it but ignores it when Umid is set, so an empty string is passed.", "required": false, "default": "" }
+        ]
+      },
+      "health": { "enabled": false },
+      "rest": { "enabled": true, "methods": ["get"] },
+      "graphql": { "enabled": true, "operation": "query" },
+      "cache": { "enabled": true, "ttl-seconds": 30 },
+      "mcp": { "custom-tool": true },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    }
+  }
+}

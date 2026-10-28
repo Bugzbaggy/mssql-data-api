@@ -1,0 +1,15 @@
+{
+  "$comment": "create-record omitted. DAB defaults every dml-tool to true, so this is an ENABLED MCP write tool. Only a has() assertion catches it.",
+  "runtime": {
+    "mcp": {
+      "dml-tools": {
+        "describe-entities": true,
+        "read-records": true,
+        "execute-entity": true,
+        "aggregate-records": true,
+        "update-record": false,
+        "delete-record": false
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "_comment": "Gate KEY-FIELDS negative fixture. key-fields as a bare string instead of an array: the natural single-PK typo. Also pins jq's `or` short-circuit: the length/any branches must not be evaluated against a non-array.",
+  "entities": {
+    "Account": {
+      "source": { "object": "core.Account", "type": "table", "key-fields": "AccountUid" },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}

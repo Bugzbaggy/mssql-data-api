@@ -1,0 +1,9 @@
+{
+  "_comment": "Gate KEY-FIELDS negative fixture. A VIEW with no key-fields. DAB requires key-fields on a view unconditionally, so this is a guaranteed runtime-init failure rather than the table case's latent one.",
+  "entities": {
+    "vwMessageLogStats": {
+      "source": { "object": "msg.vwMessageLogStats", "type": "view" },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}

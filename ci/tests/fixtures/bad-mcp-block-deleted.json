@@ -1,0 +1,38 @@
+{
+  "$comment": "Self-contained config (data-source + runtime) that lost its whole runtime.mcp block. All 7 dml-tools then default to true, so this must FAIL, not skip as an overlay.",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_DEV_AppDb_MSG_DEV')",
+    "options": {
+      "set-session-context": true
+    }
+  },
+  "runtime": {
+    "rest": {
+      "enabled": true,
+      "path": "/api",
+      "request-body-strict": true
+    },
+    "graphql": {
+      "enabled": false
+    },
+    "cache": {
+      "enabled": true,
+      "ttl-seconds": 30
+    },
+    "host": {
+      "mode": "development",
+      "cors": {
+        "origins": [],
+        "allow-credentials": false
+      },
+      "authentication": {
+        "provider": "EntraID",
+        "jwt": {
+          "audience": "@env('AUTH_JWT_AUDIENCE')",
+          "issuer": "@env('AUTH_JWT_ISSUER')"
+        }
+      }
+    }
+  }
+}

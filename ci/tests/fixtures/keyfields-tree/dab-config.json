@@ -1,0 +1,11 @@
+{
+  "_comment": "Gate KEY-FIELDS regression fixture: a base plus one regional data-source-file, the multi-file shape a deployment loads. The base's table entity declares its key; the regional one does not, which is the omission that fails DAB runtime init after every other gate is green. Run with --require-tables over both files: the gate must FAIL, naming the regional entity.",
+  "data-source": { "database-type": "mssql", "connection-string": "@env('CONN_GLOBAL_CONFIG')" },
+  "data-source-files": ["config/dab-config.region1.json"],
+  "entities": {
+    "Account": {
+      "source": { "object": "core.Account", "type": "table", "key-fields": ["AccountUid"] },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}

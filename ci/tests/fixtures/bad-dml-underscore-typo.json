@@ -1,0 +1,18 @@
+{
+  "_comment": "Gate DML-TOOLS negative fixture: the underscore typo. `read_records` is not a real key, so the real `read-records` is ABSENT — and every dml-tool defaults to true, so read-records ends up ENABLED. This is why the exact-key-set assertion (not just the value assertion) is load-bearing.",
+  "runtime": {
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp",
+      "dml-tools": {
+        "describe-entities": true,
+        "read_records": true,
+        "create-record": false,
+        "update-record": false,
+        "delete-record": false,
+        "execute-entity": true,
+        "aggregate-records": false
+      }
+    }
+  }
+}

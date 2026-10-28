@@ -1,0 +1,41 @@
+{
+  "$schema": "https://github.com/Azure/data-api-builder/releases/latest/download/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_DEV_AppDb_MNO_DEV')",
+    "options": {
+      "set-session-context": true
+    }
+  },
+  "entities": {
+    "mno_lookup_operator": {
+      "description": "Look up the mobile network operator for a destination number prefix. Reference data: prefix ranges mapped to operator name and country. Region-local (AppDb_MNO).",
+      "source": {
+        "object": "mno.Operator_GetByPrefix",
+        "type": "stored-procedure",
+        "parameters": [
+          {
+            "name": "Prefix",
+            "description": "Leading digits of the destination number, E.164 without '+'. Required.",
+            "required": true,
+            "default": ""
+          }
+        ]
+      },
+      "rest": {
+        "enabled": true,
+        "methods": ["get"]
+      },
+      "graphql": {
+        "enabled": true,
+        "operation": "query"
+      },
+      "permissions": [
+        {
+          "role": "appdb-data-api-msg-reader",
+          "actions": ["execute"]
+        }
+      ]
+    }
+  }
+}

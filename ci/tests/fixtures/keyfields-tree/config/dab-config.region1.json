@@ -1,0 +1,10 @@
+{
+  "_comment": "Regional half of the Gate KEY-FIELDS regression fixture: msg.MessageLog with no key-fields.",
+  "data-source": { "database-type": "mssql", "connection-string": "@env('CONN_REGION1_MSGDATA')" },
+  "entities": {
+    "MessageLog_region1": {
+      "source": { "object": "msg.MessageLog", "type": "table" },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}

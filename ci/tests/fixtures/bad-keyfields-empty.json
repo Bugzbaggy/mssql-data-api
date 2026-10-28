@@ -1,0 +1,9 @@
+{
+  "_comment": "Gate KEY-FIELDS negative fixture. key-fields present but EMPTY: it declares nothing, so DAB resolves no primary key exactly as if the field were absent. A presence-only check would pass this.",
+  "entities": {
+    "MessageLog_region1": {
+      "source": { "object": "msg.MessageLog", "type": "table", "key-fields": [] },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}

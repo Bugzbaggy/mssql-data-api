@@ -1,0 +1,20 @@
+# Optional: run appdb-data-api-msg on boot via Docker Compose.
+# Install:  sudo cp appdb-data-api.service /etc/systemd/system/
+#           sudo systemctl daemon-reload && sudo systemctl enable --now appdb-data-api
+# Assumes the repo is checked out at /opt/appdb-data-api and .env is filled in deploy/ec2/.
+[Unit]
+Description=appdb-data-api-msg (Microsoft DAB, Docker Compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/appdb-data-api/deploy/ec2
+ExecStart=/usr/bin/docker compose -f docker-compose.yml up -d --build
+ExecStop=/usr/bin/docker compose -f docker-compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: appdb-data-api
+description: Governed read-only app-data API on Microsoft Data API builder (REST + GraphQL + MCP)
+type: application
+# appVersion tracks the DAB base image; chart version is independent.
+version: 0.1.0
+appVersion: "2.0.9"
+maintainers:
+  - name: appdb-database
+    email: opensource@example.com

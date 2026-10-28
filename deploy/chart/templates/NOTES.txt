@@ -1,0 +1,17 @@
+appdb-data-api {{ .Chart.Version }} (DAB {{ .Chart.AppVersion }}) deployed to {{ .Release.Namespace }}.
+
+Image:  {{ .Values.image.repository }}:{{ .Values.image.tag }}
+
+Verify:
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "appdb-data-api.fullname" . }}
+{{- if .Values.secretStore.create }}
+  kubectl -n {{ .Release.Namespace }} get secretstore {{ include "appdb-data-api.secretStoreName" . }} -o jsonpath='{.status.conditions}'
+{{- end }}
+  kubectl -n {{ .Release.Namespace }} get externalsecret {{ .Values.externalSecret.name }}
+{{- if .Values.istio.enabled }}
+  istioctl analyze -n {{ .Release.Namespace }}
+  curl -fsS https://{{ .Values.istio.host }}/health
+{{- end }}
+
+If the pod never becomes Ready, check the SecretStore first — Ready=False means the IRSA
+chain is broken (SA role-arn annotation, role trust policy sub, or ESO TokenRequest rights).

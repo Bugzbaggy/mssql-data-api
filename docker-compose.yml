@@ -1,0 +1,15 @@
+# Local/dev: mount the config read-only and feed secrets from .env.
+# For prod, build the Dockerfile image instead and inject env via the k8s secret.
+services:
+  appdb-data-api:
+    # Keep in step with the Dockerfile. Rationale: docs/ci-cd-dev.md §2.
+    image: mcr.microsoft.com/azure-databases/data-api-builder:2.0.9
+    container_name: appdb-data-api
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - ./dab-config.json:/App/dab-config.json:ro
+      - ./config:/App/config:ro
+    restart: unless-stopped

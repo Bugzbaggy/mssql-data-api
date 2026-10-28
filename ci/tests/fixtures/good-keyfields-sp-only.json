@@ -1,0 +1,9 @@
+{
+  "_comment": "Gate KEY-FIELDS positive fixture. A stored-procedure-only config (the curated shape every config in this repo has) has no table or view entity, so it is skipped: key-fields is meaningless for an SP and must not be demanded. Without --require-tables this MUST pass.",
+  "entities": {
+    "get_account_balance": {
+      "source": { "object": "core.BillingBalance_Get", "type": "stored-procedure" },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["execute"] } ]
+    }
+  }
+}

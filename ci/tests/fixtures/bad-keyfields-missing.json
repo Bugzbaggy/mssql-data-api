@@ -1,0 +1,9 @@
+{
+  "_comment": "Gate KEY-FIELDS negative fixture. A table entity with no source.key-fields at all: the shape that passes every credential-free gate and then fails DAB runtime init with 'Primary key not configured on the given database object'. Not a real config; only the shape Gate KEY-FIELDS walks.",
+  "entities": {
+    "MessageLog_region1": {
+      "source": { "object": "msg.MessageLog", "type": "table" },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}
