@@ -1,0 +1,16 @@
+{
+  "_comment": "Gate RBAC negative fixture: an entity that lost its permissions[] entirely. Ungoverned, and the role-set assertion alone would not name it.",
+  "entities": {
+    "get_account_balance": {
+      "type": "stored-procedure",
+      "source": { "object": "core.BillingBalance_Get", "type": "stored-procedure" },
+      "permissions": [
+        { "role": "appdb-data-api-msg-reader", "actions": ["execute"] }
+      ]
+    },
+    "get_subaccount": {
+      "type": "stored-procedure",
+      "source": { "object": "svc.SubAccount_Get", "type": "stored-procedure" }
+    }
+  }
+}

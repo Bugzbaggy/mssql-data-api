@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appdb-data-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "appdb-data-api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "appdb-data-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appdb-data-api.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{- toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "appdb-data-api.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # runAsNonRoot with no uid defers to the image, which runs as root. `required` rather than a
+      # template default: blanking the value must fail the render, not silently reinstate the bug.
+      # See docs/ci-cd-dev.md §6a.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ required "podSecurityContext.runAsUser is required — runAsNonRoot with no uid defers to the image, which runs as root." .Values.podSecurityContext.runAsUser }}
+        runAsGroup: {{ required "podSecurityContext.runAsGroup is required." .Values.podSecurityContext.runAsGroup }}
+        fsGroup: {{ required "podSecurityContext.fsGroup is required." .Values.podSecurityContext.fsGroup }}
+        seccompProfile: { type: RuntimeDefault }
+      # readOnlyRootFilesystem leaves .NET nowhere to write its diagnostic socket.
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      containers:
+        - name: {{ include "appdb-data-api.name" . }}
+          image: "{{ .Values.image.repository }}:{{ required "image.tag is required — CI must pass --set image.tag=<short-sha>. Never :latest." .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.configFile }}
+          # Must be `command` running the CLI: the image entrypoint is the service, which
+          # ignores every config flag and always loads /App/dab-config.json.
+          command: ["dotnet", "/App/Microsoft.DataApiBuilder.dll", "start", "-c", {{ . | quote }}]
+          {{- end }}
+          ports:
+            - { name: http, containerPort: {{ .Values.service.targetPort }} }
+          env:
+            # Public OIDC values, deliberately not secrets.
+            - name: AUTH_JWT_ISSUER
+              value: {{ required "auth.jwtIssuer is required" .Values.auth.jwtIssuer | quote }}
+            - name: AUTH_JWT_AUDIENCE
+              value: {{ required "auth.jwtAudience is required" .Values.auth.jwtAudience | quote }}
+            {{- with .Values.dabEnvironment }}
+            - name: DAB_ENVIRONMENT
+              value: {{ . | quote }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.externalSecret.name }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # All three probes are process-up checks. /health always answers 200 while the engine is
+          # running — an unreachable DB shows up only in the response body, never in the status code
+          # (docs/ci-cd-dev.md §6). It still beats tcpSocket: the runtime-not-ready middleware answers
+          # 503 on every path but / until the config is loaded. A DB outage at startup needs no probe —
+          # metadata init opens a connection per stored procedure and the engine exits before Kestrel
+          # binds. The startupProbe exists to hold liveness off during a slow but successful init.
+          # timeoutSeconds is explicit because the kubelet default is 1s and /health is not a static
+          # handler: when DAB's health cache expires it re-runs SELECT 1 per data source plus every
+          # entity check, measured at 1.2-2.7s against ~0.5s cached. At the default the pod flaps
+          # out of Ready on every uncached probe and never recovers (liveness is tcpSocket, so it
+          # is not restarted either) — observed in DEV 2026-08-14.
+          startupProbe:
+            httpGet: { path: /health, port: {{ .Values.service.targetPort }} }
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+          readinessProbe:
+            httpGet: { path: /health, port: {{ .Values.service.targetPort }} }
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          livenessProbe:
+            tcpSocket: { port: {{ .Values.service.targetPort }} }
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}

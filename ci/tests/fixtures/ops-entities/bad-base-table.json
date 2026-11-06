@@ -1,0 +1,11 @@
+{
+  "_comment": "Gate OPS-ENTITIES negative fixture: svc.Webhook served as a table under a harmless-looking name. The contract serves it only through dataapi.vw_Webhook, which leaves out AuthHeader and cuts Url to its host; this entity would serve both.",
+  "data-source": { "database-type": "mssql", "connection-string": "@env('CONN_GLOBAL_CONFIG')" },
+  "entities": {
+    "Webhooks": {
+      "source": { "object": "svc.Webhook", "type": "table", "key-fields": ["WebhookId"] },
+      "health": { "enabled": false },
+      "permissions": [ { "role": "appdb-data-api-ops-reader", "actions": [ { "action": "read", "fields": { "include": ["WebhookId", "AccountUid", "EventType"] } } ] } ]
+    }
+  }
+}

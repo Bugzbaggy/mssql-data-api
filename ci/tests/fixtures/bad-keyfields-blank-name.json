@@ -1,0 +1,9 @@
+{
+  "_comment": "Gate KEY-FIELDS negative fixture. key-fields holding an empty column name: a non-empty array, so a length-only check passes it while DAB binds nothing.",
+  "entities": {
+    "Account": {
+      "source": { "object": "core.Account", "type": "table", "key-fields": [""] },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}

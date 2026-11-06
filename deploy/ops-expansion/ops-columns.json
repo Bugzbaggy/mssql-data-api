@@ -1,0 +1,138 @@
+{
+  "_README": "The reviewed column contract for the Ops_* entities: for every entity, the view it is served through, the columns that view serves, every column it leaves out and why, the key, and the filters the gateway in front of /mcp must require. Edit this file, then run `python3 -I build_ops_views.py` and commit the regenerated files with it. Gate OPS-ENTITIES (ci/gate-ops-entities.sh) checks every config against it, and Gate SQL-VIEWS (ci/sql-views/run.sh) checks the views. See README.md in this folder and docs/adding-tables-safely.md.",
+  "role": "appdb-data-api-ops-reader",
+  "dab-login": {
+    "prod": {"database": "AppCatalog", "user": "svc_dataapi", "role": "role_svc_dataapi"},
+    "dev": {"database": "AppDb_dev", "user": "dev_svc_dataapi", "role": "role_dev_svc_dataapi"}
+  },
+  "categories": {
+    "credential": "a password, key, token or secret, or a value that can carry one (the login, path or query of a URL)",
+    "personal": "data about a person: e-mail addresses, names, phone numbers, postal addresses, logins",
+    "content": "message content",
+    "free-text": "text a customer or staff member typed; it can hold anything, personal data included",
+    "commercial": "prices, costs, margins",
+    "not-needed": "no question the API answers needs it"
+  },
+  "sensitive-name-pattern": "(?i)(pass(word)?|pwd|secret|token|api_?key|private|credential|auth|cert|salt|hash|e_?mail|phone|msisdn|mobile|address|first_?name|last_?name|display_?name|full_?name|user_?name|login|body|content|comment|description|note|cost|price|margin|currency|created_?by|updated_?by)",
+  "already-served": [],
+  "deny-also": [
+    {"object": "core.vwAppUserDirectory", "why": "a reporting view that reads core.AppUser's personal columns; no API serves it"}
+  ],
+  "entities": [
+    {
+      "entity": "Ops_AppUser",
+      "view": "dataapi.vw_AppUser",
+      "source": "core.AppUser",
+      "script": "01",
+      "envs": ["prod", "dev"],
+      "key-fields": ["UserId"],
+      "served": ["UserId", "AccountUid", "RoleName", "IsActive", "LastLoginAt", "CreatedDate", "HasApiKey"],
+      "blocked": {
+        "Email": "personal",
+        "DisplayName": "personal",
+        "PasswordHash": "credential",
+        "ApiKey": "credential: served only as HasApiKey"
+      },
+      "reviewed": {
+        "LastLoginAt": "the time of the last sign-in, not a login name",
+        "HasApiKey": "1 when an API key is set, 0 when not; never the key"
+      },
+      "cuts": {"HasApiKey": "1 when ApiKey is set, else 0"},
+      "expr": {},
+      "required-filters": [["AccountUid"], ["UserId"]],
+      "exact-match-only": ["AccountUid", "UserId"],
+      "dev-null": {},
+      "notes": [],
+      "description": "Users of an account, without e-mail addresses, names or credentials. Filter on AccountUid or UserId."
+    },
+    {
+      "entity": "Ops_Webhook",
+      "view": "dataapi.vw_Webhook",
+      "source": "svc.Webhook",
+      "script": "01",
+      "envs": ["prod", "dev"],
+      "key-fields": ["WebhookId"],
+      "served": ["WebhookId", "AccountUid", "EventType", "ContentType", "TimeoutSec", "IsActive", "UpdatedAt", "HasAuthHeader", "UrlHost"],
+      "blocked": {
+        "AuthHeader": "credential: served only as HasAuthHeader",
+        "Url": "credential: its login, path or query can carry one; served only as UrlHost"
+      },
+      "reviewed": {
+        "ContentType": "the HTTP content type of the callback (application/json), not message content",
+        "HasAuthHeader": "1 when an Authorization header is set, 0 when not; never the header"
+      },
+      "cuts": {
+        "UrlHost": "scheme://host[:port] by dataapi.fnUrlParts, or NULL when the value does not parse cleanly as a URL",
+        "HasAuthHeader": "1 when AuthHeader is set, else 0"
+      },
+      "expr": {},
+      "required-filters": [["AccountUid"], ["WebhookId"]],
+      "exact-match-only": ["AccountUid", "WebhookId"],
+      "dev-null": {},
+      "notes": [],
+      "description": "Webhook callbacks of an account: event type, timeout, state and the callback host only. Filter on AccountUid or WebhookId."
+    },
+    {
+      "entity": "Ops_AccountRoute",
+      "view": "dataapi.vw_AccountRoute",
+      "source": "ref.fnAccountRoute",
+      "script": "02",
+      "envs": ["prod", "dev"],
+      "key-fields": ["AccountUid", "CountryCode"],
+      "served": ["AccountUid", "CountryCode", "RouteId", "RouteName", "IsOverride"],
+      "blocked": {
+        "CostPerMessage": "commercial"
+      },
+      "reviewed": {},
+      "cuts": {},
+      "expr": {},
+      "required-filters": [["AccountUid"]],
+      "exact-match-only": ["AccountUid"],
+      "dev-null": {},
+      "notes": ["The view applies ref.fnAccountRoute once per account it reads: once with an AccountUid filter, once per account without one. The gateway must require AccountUid eq <uuid> (ci/sql-views/assert-routing.sql measures the calls)."],
+      "description": "The route each country uses for one account, and whether it is the account's own override. Always filter on AccountUid."
+    },
+    {
+      "entity": "Ops_MessageTemplate",
+      "view": "dataapi.vw_MessageTemplate",
+      "source": "ref.MessageTemplate",
+      "script": "03",
+      "envs": ["prod", "dev"],
+      "key-fields": ["TemplateId"],
+      "served": ["TemplateId", "AccountUid", "LanguageCode", "Category", "StatusCode", "UpdatedAt", "BodyLength"],
+      "blocked": {
+        "Body": "content",
+        "TemplateName": "free-text",
+        "Description": "free-text"
+      },
+      "reviewed": {
+        "BodyLength": "the number of characters in the body, never the body"
+      },
+      "cuts": {"BodyLength": "LEN(Body)"},
+      "expr": {"BodyLength": "CAST(LEN(s.[Body]) AS int)"},
+      "required-filters": [["AccountUid"], ["TemplateId"]],
+      "exact-match-only": ["AccountUid", "TemplateId"],
+      "dev-null": {"Category": "varchar(20)"},
+      "notes": ["AppDb_dev has no Category column yet: the dev view returns it as NULL with the prod type, so the entity is the same in dev and prod."],
+      "description": "Message templates of an account: language, category, status and body length, without the body or any customer-written text."
+    },
+    {
+      "entity": "Ops_Country",
+      "view": "dataapi.vw_Country",
+      "source": "ref.Country",
+      "script": "03",
+      "envs": ["prod"],
+      "key-fields": ["CountryCode"],
+      "served": ["CountryCode", "CountryName", "DialPrefix", "RegionCode"],
+      "blocked": {},
+      "reviewed": {},
+      "cuts": {},
+      "expr": {},
+      "required-filters": [],
+      "exact-match-only": [],
+      "dev-null": {},
+      "notes": ["A small lookup, so it may be read unfiltered. ref.Country does not exist in AppDb_dev, so the view is skipped there and the entity is prod only."],
+      "description": "Country lookup: ISO code, name, dial prefix and region."
+    }
+  ]
+}

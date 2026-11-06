@@ -1,0 +1,17 @@
+{
+  "_comment": "Gate DML-TOOLS negative fixture: read-records simply OMITTED. Per the DAB 2.0.9 schema every dml-tool has \"default\": true, so an omitted key is an ENABLED write tool. No JSON-schema validation can catch this (all keys are optional), which makes the exact-key-set assertion the only defence.",
+  "runtime": {
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp",
+      "dml-tools": {
+        "describe-entities": true,
+        "create-record": false,
+        "update-record": false,
+        "delete-record": false,
+        "execute-entity": true,
+        "aggregate-records": false
+      }
+    }
+  }
+}

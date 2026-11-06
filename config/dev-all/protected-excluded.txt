@@ -1,0 +1,16 @@
+# Protected objects for the dev-all tree, read by ci/gate-dev-all-protected.sh.
+# One line per object: <config file> TAB <schema.object> TAB <reason>
+#   secret-columns:<a,b> / pii-columns:<a,b>  served, but no role may read those columns
+#   canonical:<entity>                        served ONLY under that entity name, on any database
+#   anything else                             must not be served at all (the reason is free text)
+# The config file names the database: every config on the same connection key is checked.
+#
+# This is an EXAMPLE list for the sanitised example tree (docs/dev-all-status.md). None of these
+# objects is served by it, so every line holds today; the gate self-tests serve each one and show
+# the line failing. A real tree lists its own credential, contact and billing objects here.
+dab-config.dev-all.mno.json	core.Account	canonical:mno_core_Account
+dab-config.dev-all.mno.json	core.User	secret-columns:PasswordHash,ApiSecret
+dab-config.dev-all.mno.json	core.vwAccountContact	alias of core.Account contact columns under another name
+dab-config.dev-all.mno.json	core.AccountBilling	billing-provider ids and invoice addresses
+dab-config.dev-all.vo.mno.json	mno.CarrierSettings	secret-columns:Value
+dab-config.dev-all.vo.mno.json	mno.CarrierContact	pii-columns:ContactName,Email

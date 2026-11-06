@@ -1,0 +1,18 @@
+{
+  "_comment": "Gate DML-TOOLS negative fixture: a correctly-spelled write-ish tool flipped on. All 7 keys present, but read-records is true.",
+  "runtime": {
+    "mcp": {
+      "enabled": true,
+      "path": "/mcp",
+      "dml-tools": {
+        "describe-entities": true,
+        "read-records": true,
+        "create-record": false,
+        "update-record": false,
+        "delete-record": false,
+        "execute-entity": true,
+        "aggregate-records": false
+      }
+    }
+  }
+}

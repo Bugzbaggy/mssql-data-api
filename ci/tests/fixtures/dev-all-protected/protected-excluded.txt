@@ -1,0 +1,6 @@
+# Fixture list for the Gate DEV-ALL-PROTECTED self-tests: one line of each kind.
+dab-config.dev-all.msg.json	core.Account	canonical:msg_core_Account
+dab-config.dev-all.msg.json	core.Account	pii-columns:BillingEmail,Address
+dab-config.dev-all.msg.json	core.User	secret-columns:PasswordHash,ApiSecret
+dab-config.dev-all.msg.json	core.vwAccountContact	alias of core.Account contact columns
+dab-config.dev-all.msg.json	dbo.AccountBilling	billing-provider ids and invoice addresses

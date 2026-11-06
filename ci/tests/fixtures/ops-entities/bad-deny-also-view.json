@@ -1,0 +1,11 @@
+{
+  "_comment": "Gate OPS-ENTITIES negative fixture: the legacy reporting view core.vwAppUserDirectory served directly. It is a deny-also object of the contract: it reads the personal columns of core.AppUser, so no entity may serve it.",
+  "data-source": { "database-type": "mssql", "connection-string": "@env('CONN_GLOBAL_CONFIG')" },
+  "entities": {
+    "UserDirectory": {
+      "source": { "object": "core.vwAppUserDirectory", "type": "view", "key-fields": ["UserId"] },
+      "health": { "enabled": false },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": [ { "action": "read", "fields": { "include": ["UserId", "AccountName"] } } ] } ]
+    }
+  }
+}

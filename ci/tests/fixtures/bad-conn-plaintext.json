@@ -1,0 +1,8 @@
+{
+  "$comment": "A committed connection string instead of an @env() reference. The gate must reject it WITHOUT echoing the value.",
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "Server=192.0.2.1,1433;Database=d;User ID=u;Password=p;Encrypt=True"
+  },
+  "entities": {}
+}

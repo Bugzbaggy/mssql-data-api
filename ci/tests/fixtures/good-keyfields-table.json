@@ -1,0 +1,9 @@
+{
+  "_comment": "Gate KEY-FIELDS positive fixture. The demo schema's core.Account (seed/01-demo-schema.sql) as a table entity with its real primary key declared. This is the shape a table entity must have, and it is what --require-tables accepts.",
+  "entities": {
+    "Account": {
+      "source": { "object": "core.Account", "type": "table", "key-fields": ["AccountUid"] },
+      "permissions": [ { "role": "appdb-data-api-msg-reader", "actions": ["read"] } ]
+    }
+  }
+}

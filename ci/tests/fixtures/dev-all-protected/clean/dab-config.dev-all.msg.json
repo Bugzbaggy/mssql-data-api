@@ -1,0 +1,70 @@
+{
+  "data-source": {
+    "database-type": "mssql",
+    "connection-string": "@env('CONN_DEV_AppDb_MSG_DEV')"
+  },
+  "entities": {
+    "msg_core_Account": {
+      "source": {
+        "object": "core.Account",
+        "type": "table",
+        "key-fields": [
+          "AccountUid"
+        ]
+      },
+      "rest": {
+        "enabled": true
+      },
+      "permissions": [
+        {
+          "role": "appdb-data-api-msg-reader",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "*"
+                ],
+                "exclude": [
+                  "BillingEmail",
+                  "Address"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "msg_core_User": {
+      "source": {
+        "object": "core.User",
+        "type": "table",
+        "key-fields": [
+          "UserId"
+        ]
+      },
+      "rest": {
+        "enabled": true
+      },
+      "permissions": [
+        {
+          "role": "appdb-data-api-msg-reader",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "*"
+                ],
+                "exclude": [
+                  "PasswordHash",
+                  "ApiSecret"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
